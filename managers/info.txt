@@ -1,0 +1,4 @@
+this folder exists to modify db tables/entities that is not being modified by API controllers
+
+ex - you want to update bulk upload logs' status to PROCESSING, but wont hit an API for this purpose
+     there will be no param like, req.body, but will be a different kind of param like status/ media_url
