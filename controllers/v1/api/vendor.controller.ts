@@ -25,7 +25,7 @@ export class VendorController extends MasterController {
             payload = req.body.data;
             
             // Add debug logging
-            this.logger.info(`Received payload: ${JSON.stringify(payload)}`, 'VendorController:createVendor');
+            // this.logger.info(`Received payload: ${JSON.stringify(payload)}`, 'VendorController:createVendor');
 
             // Check if payload exists
             if (!payload) {
