@@ -1,11 +1,11 @@
 import dotenv from "dotenv";
 import Logger from "../utils/logger.util";
-import { Client } from "pg";
+import pg from "pg";
+const { Client } = pg;
 import { Constants } from "../utils/constants.util";
 import { QueryEntity } from "../entities/core/query.entity";
 
 dotenv.config();
-
 const logger = new Logger();
 
 // PostgreSQL database connection information
@@ -15,12 +15,14 @@ const dbConfig = {
     database: process.env.USERS_DB_NAME,
     user: process.env.SQL_DB_USER,
     password: process.env.SQL_DB_PASSWORD,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
-    ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+    // idleTimeoutMillis: 30000,
+    // connectionTimeoutMillis: 2000,
+    // ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+    ssl: {
+        rejectUnauthorized: false // Only use this in development! For production, use proper SSL certificates
+    }
 };
 
-// Type definition for query response
 type ResponseType = {
     command: string;
     insertId: number | null;
@@ -35,15 +37,15 @@ type ResponseType = {
     tat: number;
 };
 
-// Logger initialization
-logger.info("DB Connection: Preparing to connect to database.", "DB Connection");
-
 export default class SQLMaster {
-    // Method to acquire a single client and connect to the database
-    async getClient(): Promise<Client> {
-        const client = new Client(dbConfig);
+    private client: any = null;
+
+    // Get a new client connection
+    async getClient() {
         try {
+            const client = new Client(dbConfig);
             await client.connect();
+            this.client = client;
             logger.info("Database client successfully connected", "SQLMaster:getClient");
             return client;
         } catch (err) {
@@ -52,17 +54,45 @@ export default class SQLMaster {
         }
     }
 
-    // Method to execute a query
-    async executeQuery(query: string, args: any[]): Promise<ResponseType> {
-        const client = await this.getClient(); // Get a connected client
+    // Begin a transaction
+    async beginTransaction(): Promise<void> {
+        if (!this.client) {
+            throw new Error("No client connection available");
+        }
+        await this.client.query('BEGIN');
+        logger.info("Transaction started", "SQLMaster:beginTransaction");
+    }
+
+    // Commit a transaction
+    async commitTransaction(): Promise<void> {
+        if (!this.client) {
+            throw new Error("No client connection available");
+        }
+        await this.client.query('COMMIT');
+        logger.info("Transaction committed", "SQLMaster:commitTransaction");
+    }
+
+    // Rollback a transaction
+    async rollbackTransaction(): Promise<void> {
+        if (!this.client) {
+            throw new Error("No client connection available");
+        }
+        await this.client.query('ROLLBACK');
+        logger.info("Transaction rolled back", "SQLMaster:rollbackTransaction");
+    }
+
+    // Execute a query within the transaction
+    async executeTransactionQuery(query: string, args: any[]): Promise<ResponseType> {
+        if (!this.client) {
+            throw new Error("No client connection available");
+        }
+
         const startMS = new Date().getTime();
-
-        // Initialize query response model
         const queryModel: ResponseType = { ...QueryEntity };
-        try {
-            const result = await client.query(query, args);
 
-            // Populate the query response
+        try {
+            const result = await this.client.query(query, args);
+
             queryModel.command = result.command;
             queryModel.rows = result.rows || [];
             queryModel.rowCount = result.rowCount || 0;
@@ -82,15 +112,20 @@ export default class SQLMaster {
 
             return queryModel;
         } catch (err) {
-            logger.error(`Error executing query: ${query} - ${err.message}`, "SQLMaster:executeQuery");
+            logger.error(`Error executing query: ${query} - ${err.message}`, "SQLMaster:executeTransactionQuery");
             queryModel.message = "Query execution failed";
             queryModel.info = err.message;
             queryModel.status = Constants.DB_QUERY_ERROR;
             throw queryModel;
-        } finally {
-            // Always release the client
-            await client.end();
-            logger.info("Database client disconnected", "SQLMaster:executeQuery");
+        }
+    }
+
+    // Close the client connection
+    async closeConnection(): Promise<void> {
+        if (this.client) {
+            await this.client.end();
+            this.client = null;
+            logger.info("Database client connection closed", "SQLMaster:closeConnection");
         }
     }
 }

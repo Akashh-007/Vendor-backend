@@ -29,5 +29,9 @@ export class Routes {
             documentUploadMiddleware,
             uploadController.uploadFiles.bind(uploadController)
         );
+
+        // New routes
+        this.router.get('/vendors', vendorController.getAllVendors.bind(vendorController));
+        this.router.get('/vendor/:id', vendorController.getVendorById.bind(vendorController));
     }
 }

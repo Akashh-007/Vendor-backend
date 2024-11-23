@@ -37,20 +37,31 @@ type VendorData = {
     }[];
 };
 
-export default class VendorModel {
+export default class VendorModelClient {
     private db: SQLMaster;
+    private logger: Logger; 
 
     constructor() {
         this.db = new SQLMaster();
+        this.logger = new Logger();
     }
 
     // Main method to create vendor and related data
     async createVendor(vendorData: VendorData) {
-        const client = await this.db.getClient();
-        let vendorId: number;
-
+        let client = null;
         try {
-            await client.query("BEGIN"); // Start the transaction
+            // Get client and start transaction
+            client = await this.db.getClient();
+            if (!client) {
+                throw new Error('Failed to get database client');
+            }
+
+            this.logger.info('Starting vendor creation transaction', 'VendorModel:createVendor');
+
+            await this.db.beginTransaction();
+
+            // Add debug logging before each query
+            this.logger.info('Executing vendor insert query', 'VendorModel:createVendor');
 
             // 1. Insert vendor data
             const vendorQuery = `
@@ -70,10 +81,10 @@ export default class VendorModel {
                 vendorData.workingHours || null
             ];
 
-            const vendorResult = await client.query(vendorQuery, vendorValues);
-            vendorId = vendorResult.rows[0].id;
+            const vendorResult = await this.db.executeTransactionQuery(vendorQuery, vendorValues);
+            const vendorId = vendorResult.rows[0].id;
 
-            logger.info(`Vendor inserted with ID: ${vendorId}`, "VendorModel:createVendor");
+            this.logger.info(`Vendor inserted with ID: ${vendorId}`, "VendorModel:createVendor");
 
             // 2. Insert banking details if provided
             if (vendorData.bankName || vendorData.accountNumber) {
@@ -94,8 +105,8 @@ export default class VendorModel {
                     vendorData.ifscCode
                 ];
 
-                await client.query(bankingQuery, bankingValues);
-                logger.info(`Banking details inserted for vendor: ${vendorId}`, "VendorModel:createVendor");
+                await this.db.executeTransactionQuery(bankingQuery, bankingValues);
+                this.logger.info(`Banking details inserted for vendor: ${vendorId}`, "VendorModel:createVendor");
             }
 
             // 3. Insert identification details
@@ -115,8 +126,8 @@ export default class VendorModel {
                 vendorData.esicRegistrationNumber
             ];
 
-            await client.query(identificationQuery, identificationValues);
-            logger.info(`Identification details inserted for vendor: ${vendorId}`, "VendorModel:createVendor");
+            await this.db.executeTransactionQuery(identificationQuery, identificationValues);
+            this.logger.info(`Identification details inserted for vendor: ${vendorId}`, "VendorModel:createVendor");
 
             // 4. Insert verifications
             const verificationQuery = `
@@ -140,8 +151,8 @@ export default class VendorModel {
                 vendorData.verifications.bankDetails.verifiedAt
             ];
 
-            await client.query(verificationQuery, verificationValues);
-            logger.info(`Verifications inserted for vendor: ${vendorId}`, "VendorModel:createVendor");
+            await this.db.executeTransactionQuery(verificationQuery, verificationValues);
+            this.logger.info(`Verifications inserted for vendor: ${vendorId}`, "VendorModel:createVendor");
 
             // 5. Insert custom fields if any
             if (Object.keys(vendorData.customFields).length > 0) {
@@ -151,8 +162,8 @@ export default class VendorModel {
                     ) VALUES ($1, $2, $3)
                 `;
                 for (const [fieldName, fieldValue] of Object.entries(vendorData.customFields)) {
-                    await client.query(customFieldsQuery, [vendorId, fieldName, fieldValue]);
-                    logger.info(`Custom field inserted: ${fieldName}`, "VendorModel:createVendor");
+                    await this.db.executeTransactionQuery(customFieldsQuery, [vendorId, fieldName, fieldValue]);
+                    this.logger.info(`Custom field inserted: ${fieldName}`, "VendorModel:createVendor");
                 }
             }
 
@@ -175,23 +186,31 @@ export default class VendorModel {
                     document.file_key
                 ];
 
-                await client.query(documentQuery, documentValues);
-                logger.info(`Document uploaded for vendor: ${vendorId}`, "VendorModel:createVendor");
+                await this.db.executeTransactionQuery(documentQuery, documentValues);
+                this.logger.info(`Document uploaded for vendor: ${vendorId}`, "VendorModel:createVendor");
             }
 
-            // Commit transaction
-            await client.query("COMMIT");
-            logger.info("Transaction committed successfully", "VendorModel:createVendor");
+            // Commit the transaction
+            await this.db.commitTransaction();
+            this.logger.info('Transaction committed successfully', 'VendorModel:createVendor');
 
             return { vendorId };
 
-        } catch (error) {
-            await client.query("ROLLBACK"); // Rollback if an error occurs
-            logger.error(`Transaction failed: ${error.message}`, "VendorModel:createVendor");
-            throw new Error(error.message || 'Transaction failed');
+        } catch (error: any) {
+            // Improved error handling
+            this.logger.error(`Transaction failed: ${error.message}\n${error.stack}`, 'VendorModel:createVendor');
+            
+            if (client) {
+                await this.db.rollbackTransaction();
+                this.logger.info('Transaction rolled back', 'VendorModel:createVendor');
+            }
+            
+            throw new Error(`Failed to create vendor: ${error.message}`);
         } finally {
-            await client.end();
-            logger.info("Database client released", "VendorModel:createVendor");
+            if (client) {
+                await this.db.closeConnection();
+                this.logger.info('Database connection closed', 'VendorModel:createVendor');
+            }
         }
     }
 }
