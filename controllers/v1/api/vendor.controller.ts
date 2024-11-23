@@ -74,6 +74,7 @@ export class VendorController extends MasterController {
                 }
             };
 
+            console.log(vendorData);
             // Create vendor using model
             resModel = await this.vendorModel.createVendor(vendorData);
 
