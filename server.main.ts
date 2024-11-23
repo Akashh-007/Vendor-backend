@@ -5,7 +5,7 @@ import { usersDBPool } from "./database/postgres.database";
 import { Routes } from "./routes/server.routes";
 import Logger from "./utils/logger.util";
 import { AuthRoutes } from "./routes/auth.routes";
-import multer from 'multer';
+// import multer from 'multer';
 dotenv.config();
 
 class App {
@@ -38,8 +38,8 @@ class App {
     // Start listening on the server (both Express and Socket.IO)
    
     this.app.listen(this.SERVER_PORT, () => {
-      // this.logger.info(`Server is running on http://localhost:${this.SERVER_PORT}`, 'App.listen');
-      console.log(`Server is running on http://localhost:${this.SERVER_PORT}`);
+      this.logger.info(`Server is running on http://localhost:${this.SERVER_PORT}`, 'App.listen');
+      // console.log(`Server is running on http://localhost:${this.SERVER_PORT}`);
     });
   }
 }

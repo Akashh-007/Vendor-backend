@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { Constants } from "../../../utils/constants.util";
 import { ResponseEntity } from "../../../entities/core/response.entity";
 import MasterController from "../../master.controller";
-import { VendorModel } from "../../../models/v1/vendor.model";
+import VendorModel  from "../../../models/v1/vendorClient.model";
 
 export class VendorController extends MasterController {
     private vendorModel: VendorModel;
@@ -15,12 +15,15 @@ export class VendorController extends MasterController {
 
     async createVendor(req: Request, res: Response) {
         const startMS = new Date().getTime();
-        let resModel = { ...ResponseEntity }
+        let resModel = { ...ResponseEntity };
+        let payload;
         try {
-            const formData = req.body;
-
+            payload = req.body.data;
+            console.log(payload);
+            // console.log(req);
+            // payload = typeof req.body.data === 'string' ? JSON.parse(req.body.data) : req.body.data;
             // Check if formData exists
-            if (!formData) {
+            if (!payload) {
                 resModel.status = -9;
                 resModel.info = "error: No data provided";
                 return res.status(Constants.HTTP_BAD_REQUEST).json(resModel);
@@ -28,7 +31,7 @@ export class VendorController extends MasterController {
 
             // Verify required fields
             const requiredFields = ['name'];
-            const missingFields = requiredFields.filter(field => !formData[field]);
+            const missingFields = requiredFields.filter(field => !payload[field]);
             
             if (missingFields.length > 0) {
                 resModel.status = -9;
@@ -39,34 +42,38 @@ export class VendorController extends MasterController {
             // Transform data for vendor model
             const vendorData = {
                 // Basic Information
-                name: formData.name,
-                tradeName: formData.tradeName,
-                emailId: formData.emailId,
-                phoneNumber: formData.phoneNumber,
-                typeOfOrganization: formData.typeOfOrganization,
-                natureOfBusiness: formData.natureOfBusiness,
-                workingHours: formData.workingHours,
+                
+                name: payload.name,
+                tradeName: payload.tradeName,
+                emailId: payload.emailId,
+                phoneNumber: payload.phoneNumber,
+                typeOfOrganization: payload.typeOfOrganization,
+                natureOfBusiness: payload.natureOfBusiness,
+                workingHours: payload.workingHours,
 
                 // Banking Details
-                bankName: formData.bankName,
-                branchAddress: formData.branchAddress,
-                branchPhoneNumber: formData.branchPhoneNumber,
-                accountNumber: formData.accountNumber,
-                typeOfAccount: formData.typeOfAccount,
-                ifscCode: formData.ifscCode,
+                bankName:   payload.bankName,
+                branchAddress: payload.branchAddress,
+                branchPhoneNumber: payload.branchPhoneNumber,
+                accountNumber: payload.accountNumber,
+                typeOfAccount: payload.typeOfAccount,
+                ifscCode: payload.ifscCode,
 
                 // Identification Details
-                panNumber: formData.panNumber,
-                aadharNumber: formData.aadharNumber,
-                gstNumber: formData.gstNumber,
-                pfRegistrationNumber: formData.pfRegistrationNumber,
-                esicRegistrationNumber: formData.esicRegistrationNumber,
+                panNumber: payload.panNumber,
+                aadharNumber: payload.aadharNumber,
+                gstNumber: payload.gstNumber,
+                pfRegistrationNumber: payload.pfRegistrationNumber,
+                esicRegistrationNumber: payload.esicRegistrationNumber,
+
+                // Add documents field
+                documents: payload.documents || [],
 
                 // Custom Fields
-                customFields: formData.customFields || {},
+                customFields: payload.customFields || {},
 
                 // Verifications
-                verifications: formData.verifications || {
+                verifications: payload.verifications || {
                     bankDetails: { verified: false, verifiedAt: null },
                     pan: { verified: false, verifiedAt: null },
                     aadhar: { verified: false, verifiedAt: null },
@@ -76,7 +83,10 @@ export class VendorController extends MasterController {
 
             console.log(vendorData);
             // Create vendor using model
-            resModel = await this.vendorModel.createVendor(vendorData);
+            const result = await this.vendorModel.createVendor(vendorData);
+            resModel.status = Constants.SUCCESS;
+            resModel.info = "Vendor created successfully";
+            resModel.data = result;
 
             resModel.endDT = new Date();
             resModel.tat = (new Date().getTime() - startMS) / 1000;
@@ -89,7 +99,7 @@ export class VendorController extends MasterController {
 
         } catch (error) {
             resModel.status = -9;
-            resModel.info = "catch: " + error + " : " + resModel.info;
+            resModel.info = "catch: " + JSON.stringify(error) + " : " + resModel.info;
             this.logger.error(JSON.stringify(resModel), `${this.constructor.name} : createVendor`);
             res.status(Constants.HTTP_INTERNAL_SERVER_ERROR).json(resModel);
         }
